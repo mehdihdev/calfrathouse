@@ -2,7 +2,17 @@ import bcrypt from 'bcrypt'
 import User from '../models/User'
 import { connectToDatabase } from './db'
 
-export async function registerUser(data: any) {
+interface RegisterUserData {
+  email: string
+  password: string
+  firstName?: string
+  lastName?: string
+  roomNumber?: string
+  rentAmount?: number
+}
+
+
+export async function registerUser(data: RegisterUserData) {
   await connectToDatabase()
   const existing = await User.findOne({ email: data.email })
   if (existing) throw new Error("User already exists")

@@ -2,9 +2,11 @@ import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
 
-export async function POST(req: Request, { params }: { params: { uid: string } }) {
+export async function POST(req: Request) {
   try {
-    const { uid } = params
+    const url = new URL(req.url)
+    const uid = url.pathname.split('/').pop()
+
     if (!uid) {
       return NextResponse.json({ message: 'User ID is required' }, { status: 400 })
     }
@@ -17,12 +19,9 @@ export async function POST(req: Request, { params }: { params: { uid: string } }
 
     const buffer = Buffer.from(await file.arrayBuffer())
     const avatarsDir = path.join(process.cwd(), 'public', 'avatars')
-
-    // Ensure the avatars directory exists
     await fs.mkdir(avatarsDir, { recursive: true })
 
-    // Save the file
-    const filePath = path.join(avatarsDir, `${uid}`)
+    const filePath = path.join(avatarsDir, uid)
     await fs.writeFile(filePath, buffer)
 
     return NextResponse.json({ message: 'File uploaded successfully' })

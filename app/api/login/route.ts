@@ -42,8 +42,13 @@ export async function POST(req: Request) {
 
     console.log('Login successful for user:', user.userId)
     return response
-  } catch (err: any) {
-    console.error('Login error:', err)
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error('Login error:', err.message)
+    } else {
+      console.error('Login error:', err)
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+  
 }

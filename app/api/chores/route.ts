@@ -55,8 +55,16 @@ export async function POST(req: Request) {
     // Generate repeated instances of the chore
     const now = new Date()
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0)
-    const repeatedChores = []
-    let currentDate = new Date(dueDate)
+    const repeatedChores: {
+      _id: Types.ObjectId
+      name: string
+      dueDate: string
+      completed: boolean
+      repeat: string
+      assignedTo: string[]
+    }[] = []
+    
+    const currentDate = new Date(dueDate)
 
     while (currentDate <= endOfMonth) {
       repeatedChores.push({

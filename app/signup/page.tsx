@@ -11,9 +11,9 @@ export default function SignupPage() {
     phoneNumber: '', roomNumber: '', rentAmount: ''
   })
 
-  const handleChange = (e: any) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
-  }
+  }  
 
   const handleSubmit = async () => {
     const res = await fetch('/api/signup', {

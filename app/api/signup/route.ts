@@ -1,9 +1,7 @@
 import { registerUser } from '@/lib/auth'
 import { NextResponse } from 'next/server'
-import bcrypt from 'bcrypt'
 import { v4 as uuidv4 } from 'uuid'
 
-const SALT_ROUNDS = 10; // Define a constant for salt rounds
 
 export async function POST(req: Request) {
   const body = await req.json()
@@ -21,8 +19,13 @@ export async function POST(req: Request) {
     await registerUser(userWithHashedPassword)
     console.log('User successfully registered:', userWithHashedPassword) // Debug log
     return NextResponse.json({ success: true })
-  } catch (err: any) {
-    console.error('Signup error:', err)
+  } catch (err) {
+    if (err instanceof Error) {
+      console.error('Signup error:', err.message)
+    } else {
+      console.error('Signup error:', err)
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+  
 }

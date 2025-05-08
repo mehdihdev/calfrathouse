@@ -1,12 +1,18 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { connectToDatabase } from '@/lib/db'
 import User from '@/models/User'
 
-export async function GET(req: Request, context: { params: { choreId: string } }) {
+// Extract choreId from the URL manually
+function extractChoreIdFromUrl(url: string): string {
+  const parts = url.split('/')
+  return parts[parts.length - 1]
+}
+
+export async function GET(req: NextRequest) {
   try {
     await connectToDatabase()
-    const { choreId } = await context.params // Await params before accessing choreId
-    const [userId, actualChoreId] = choreId.split(':') // Split choreId into userId and actualChoreId
+    const choreId = extractChoreIdFromUrl(req.url)
+    const [userId, actualChoreId] = choreId.split(':')
 
     const user = await User.findOne({ userId })
     if (!user) {
@@ -25,11 +31,11 @@ export async function GET(req: Request, context: { params: { choreId: string } }
   }
 }
 
-export async function POST(req: Request, context: { params: { choreId: string } }) {
+export async function POST(req: NextRequest) {
   try {
     await connectToDatabase()
-    const { choreId } = context.params
-    const [userId] = choreId.split(':') // Extract userId from choreId
+    const choreId = extractChoreIdFromUrl(req.url)
+    const [userId] = choreId.split(':')
     const { name, dueDate } = await req.json()
 
     if (!name || !dueDate) {
@@ -52,11 +58,11 @@ export async function POST(req: Request, context: { params: { choreId: string } 
   }
 }
 
-export async function PATCH(req: Request, context: { params: { choreId: string } }) {
+export async function PATCH(req: NextRequest) {
   try {
     await connectToDatabase()
-    const { choreId } = await context.params // Await params before accessing choreId
-    const [userId, actualChoreId] = choreId.split(':') // Split choreId into userId and actualChoreId
+    const choreId = extractChoreIdFromUrl(req.url)
+    const [userId, actualChoreId] = choreId.split(':')
 
     const user = await User.findOne({ userId })
     if (!user) {
@@ -68,7 +74,7 @@ export async function PATCH(req: Request, context: { params: { choreId: string }
       return NextResponse.json({ message: 'Chore not found' }, { status: 404 })
     }
 
-    chore.completed = !chore.completed // Toggle the completion status
+    chore.completed = !chore.completed
     await user.save()
 
     return NextResponse.json(chore)
@@ -78,13 +84,12 @@ export async function PATCH(req: Request, context: { params: { choreId: string }
   }
 }
 
-export async function DELETE(req: Request, context: { params: { choreId: string } }) {
+export async function DELETE(req: NextRequest) {
   try {
     await connectToDatabase()
-    const { choreId } = context.params
-    const [userId, actualChoreId] = choreId.split(':') // Split choreId into userId and actualChoreId
+    const choreId = extractChoreIdFromUrl(req.url)
+    const [, actualChoreId] = choreId.split(':')
 
-    // Remove the chore from all users' chores arrays
     await User.updateMany(
       { 'chores._id': actualChoreId },
       { $pull: { chores: { _id: actualChoreId } } }

@@ -5,8 +5,16 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as Toast from '@radix-ui/react-toast'
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<any[]>([])
-  const [isAdmin, setIsAdmin] = useState(false) // Replace with actual admin check
+  interface Document {
+    _id: string
+    name: string
+    type: string
+    filename: string
+    createdAt: string
+  }
+  
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [isAdmin,] = useState(false) // Replace with actual admin check
   const [newDocument, setNewDocument] = useState({ name: '', type: '', filename: '' })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)

@@ -6,11 +6,17 @@ import * as Tabs from '@radix-ui/react-tabs' // Import Tabs from Radix UI
 import * as Dialog from '@radix-ui/react-dialog' // Import Dialog from Radix UI
 import * as Toast from '@radix-ui/react-toast' // Import Toast from Radix UI
 
+
 export default function DashboardPage() {
-  const [user, setUser] = useState<any | null | undefined>(undefined)
-  const [housemates, setHousemates] = useState<any[]>([]) // Specify type for housemates
-  const [roommates, setRoommates] = useState<any[]>([]) // Specify type for roommates
-  const [importantDates, setImportantDates] = useState<any[]>([]) // State for important dates
+  interface User { userId: string; firstName: string; lastName: string; roomNumber: string; rentAmount: number; admin?: boolean; costs?: Cost[]; createdAt: string; }
+  interface ImportantDate { id: string; title: string; date: string; }
+  interface Cost { _id: string; name: string; amount: number; appliedTo: string[]; timeframe: number }
+  interface Chore { _id: string; name: string; dueDate: string; completed: boolean; repeat: string }
+
+  const [user, setUser] = useState<User | null | undefined>(undefined)
+  const [housemates, setHousemates] = useState<User[]>([])
+  const [roommates, setRoommates] = useState<User[]>([])
+  const [importantDates, setImportantDates] = useState<ImportantDate[]>([])
   const [newDate, setNewDate] = useState({ title: '', date: '' }) // State for adding a new date
   const [darkMode, setDarkMode] = useState(false) // State for light/dark mode
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false); // Separate state for profile picture modal
@@ -22,7 +28,7 @@ export default function DashboardPage() {
     newPassword: '',
     confirmPassword: '',
   })
-  const [chores, setChores] = useState<any[]>([]) // State for chores
+  const [chores, setChores] = useState<Chore[]>([])
   const [newChore, setNewChore] = useState<{
     name: string
     dueDate: string
@@ -38,10 +44,16 @@ export default function DashboardPage() {
   const [isDateModalOpen, setIsDateModalOpen] = useState(false) // Modal state for important dates
   const [toastMessage, setToastMessage] = useState<string | null>(null) // Toast state
   const [toastType, setToastType] = useState<'success' | 'error' | null>(null); // Toast type state
-  const [costs, setCosts] = useState<any[]>([]) // State for costs
-  const [documents, setDocuments] = useState<any[]>([]) // State for documents
-  const [newDocument, setNewDocument] = useState({ name: '', type: '', file: null }); // Updated to include file
+  interface Document { _id: string; name: string; type: string; filename: string }
 
+  const [costs, setCosts] = useState<Cost[]>([])
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [newDocument, setNewDocument] = useState<{ name: string; type: string; file: File | null }>({
+    name: '',
+    type: '',
+    file: null,
+  });
+  
   useEffect(() => {
     // Apply or remove the 'dark' class on the <html> element
     if (darkMode) {
@@ -80,11 +92,11 @@ export default function DashboardPage() {
         // Filter roommates based on room number
         const userRoomNumber = data.user.roomNumber
         const roommates = allHousemates.filter(
-          (mate: any) => mate.roomNumber === userRoomNumber && mate.userId !== data.user.userId
+          (mate: User) => mate.roomNumber === userRoomNumber && mate.userId !== data.user.userId
         )
 
         // Set housemates and roommates
-        setHousemates(allHousemates.filter((mate: any) => mate.userId !== data.user.userId))
+        setHousemates(allHousemates.filter((mate: User) => mate.userId !== data.user.userId))
         setRoommates(roommates)
       }
     } catch (err) {
@@ -98,6 +110,14 @@ export default function DashboardPage() {
       const res = await fetch('/api/important-dates')
       if (!res.ok) {
         console.error(`Error fetching important dates: ${res.status} ${res.statusText}`)
+        if (res.status === 401) {
+          // Handle unauthorized error (e.g., redirect to login)
+          alert('Session expired. Please log in again.')
+          document.cookie = 'auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;'
+          localStorage.clear()
+          sessionStorage.clear()
+          router.push('/login')
+        }
         return
       }
       const data = await res.json()
@@ -167,21 +187,6 @@ export default function DashboardPage() {
     fetchDocuments()
   }, [])
 
-  const userCosts = useMemo(() => {
-    if (!user || !user.costs) return [] // Ensure user and costs are defined
-    const now = new Date()
-    return user.costs.filter((cost: any) => {
-      if (cost.timeframe === -1) return true // One-time cost
-      const startDate = new Date(user.createdAt) // Assuming user has a createdAt field
-      const diffDays = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-      return diffDays % cost.timeframe === 0 || diffDays === 0 // Include costs on the first day
-    })
-  }, [user])
-
-  const totalCost = useMemo(() => {
-    return costs.reduce((sum: number, cost: any) => sum + cost.amount, 0)
-  }, [costs])
-
   const [newCost, setNewCost] = useState<{
     name: string
     amount: string
@@ -222,18 +227,23 @@ export default function DashboardPage() {
   }
 
   const handleAddCost = async () => {
+    if (!user) {
+      setToastMessage('User not loaded. Please try again later.')
+      return
+    }
+  
     if (!newCost.name || !newCost.amount) {
       setToastMessage('Please provide both a name and an amount for the cost.')
       return
     }
-
+  
     try {
       const res = await fetch('/api/costs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...newCost,
-          appliedTo: newCost.appliedTo.length > 0 ? newCost.appliedTo : ['-1'], // Default to all users if none selected
+          appliedTo: newCost.appliedTo.length > 0 ? newCost.appliedTo : ['-1'],
           createdBy: user.userId,
         }),
       })
@@ -250,6 +260,8 @@ export default function DashboardPage() {
       setToastMessage('Error adding cost.')
     }
   }
+  
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -303,7 +315,13 @@ export default function DashboardPage() {
         alert('Failed to add important date')
       }
     } catch (err) {
-      alert('Error adding important date')
+      if (err instanceof Error) {
+        console.error('Signup error:', err.message)
+        alert('Error adding important date')
+      } else {
+        console.error('Signup error:', err)
+        alert('Error adding important date')
+      }
     }
   }
 
@@ -318,6 +336,11 @@ export default function DashboardPage() {
         alert('Failed to remove important date')
       }
     } catch (err) {
+      if (err instanceof Error) {
+        console.error('Signup error:', err.message)
+      } else {
+        console.error('Signup error:', err)
+      }
       alert('Error removing important date')
     }
   }
@@ -421,7 +444,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/chores`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newChore, userId: user.userId }), // Include userId in the request body
+        body: JSON.stringify({ ...newChore, userId: user!.userId }), // Include userId in the request body
       })
 
       if (res.ok) {
@@ -439,10 +462,11 @@ export default function DashboardPage() {
   }
 
   const handleFileUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setNewDocument((prev) => ({ ...prev, file: e.target.files[0] }));
+    const files = e.target.files
+    if (files && files[0]) {
+      setNewDocument((prev) => ({ ...prev, file: files[0] }))
     }
-  };
+  }  
 
   const handleAddDocument = async () => {
     if (!newDocument.name || !newDocument.type || !newDocument.file) {
@@ -499,21 +523,12 @@ export default function DashboardPage() {
     const now = new Date()
     const nextWeek = new Date()
     nextWeek.setDate(now.getDate() + 7)
-    return importantDates.filter((date: any) => {
+    return importantDates.filter((date: ImportantDate) => {
       const dateObj = new Date(date.date)
       return dateObj >= now && dateObj <= nextWeek && !dismissedDates.includes(date.id)
     })
   }, [importantDates, dismissedDates])
 
-  const allOtherDates = useMemo(() => {
-    const now = new Date()
-    const nextWeek = new Date()
-    nextWeek.setDate(now.getDate() + 7)
-    return importantDates.filter((date: any) => {
-      const dateObj = new Date(date.date)
-      return dateObj > nextWeek
-    })
-  }, [importantDates])
 
   const choresThisMonth = useMemo(() => {
     const now = new Date()
@@ -530,7 +545,7 @@ export default function DashboardPage() {
 
       // Handle repeated chores
       const repeatedChores = []
-      let currentDate = new Date(dueDate)
+      const currentDate = new Date(dueDate)
 
       while (currentDate <= endOfMonth) {
         if (currentDate >= startOfMonth) {
@@ -607,7 +622,7 @@ export default function DashboardPage() {
           <div className="mb-4 p-4 bg-yellow-100 border border-yellow-300 rounded">
             <h3 className="font-bold text-yellow-800">Upcoming Important Dates</h3>
             <ul className="mt-2">
-              {upcomingDates.map((date: any) => (
+              {upcomingDates.map((date: ImportantDate) => (
                 <li key={date.id} className="flex justify-between items-center">
                   <span>{date.title} - {new Date(date.date).toLocaleDateString()}</span>
                   <button
@@ -647,9 +662,10 @@ export default function DashboardPage() {
             <div className="flex flex-col lg:flex-row lg:space-x-4">
               {/* Profile Card */}
               <CardRoot className="flex-1">
-                <CardHeader className="flex flex-col items-center">
+                <CardHeader className="flex flex-col">
                   {/* Profile Picture */}
                   <div className="relative">
+                    
                     <img
                       src={`/avatars/${user?.userId}`}
                       alt="Profile Picture"
@@ -695,7 +711,7 @@ export default function DashboardPage() {
                     <p>No important dates found.</p>
                   ) : (
                     <ul className="space-y-2">
-                      {importantDates.map((date: any) => (
+                      {importantDates.map((date: ImportantDate) => (
                         <li key={date.id} className="flex justify-between items-center">
                           <span>{date.title} - {new Date(date.date).toLocaleDateString()}</span>
                           {user?.admin && (
@@ -775,7 +791,7 @@ export default function DashboardPage() {
                             {chore.name} - Due: {new Date(chore.dueDate).toLocaleDateString()}
                           </span>
                           <button
-                            onClick={() => handleToggleChore(user.userId, chore._id)}
+                            onClick={() => handleToggleChore(user!.userId, chore._id)}
                             className={`px-4 py-2 rounded ${
                               chore.completed ? 'bg-green-500 text-white' : 'bg-gray-300 text-black'
                             }`}
@@ -783,7 +799,7 @@ export default function DashboardPage() {
                             {chore.completed ? 'Completed' : 'Mark as Done'}
                           </button>
                           <button
-                            onClick={() => handleDeleteChore(user.userId, chore._id)}
+                            onClick={() => handleDeleteChore(user!.userId, chore._id)}
                             className="px-4 py-2 bg-red-500 text-white rounded"
                           >
                             Delete
