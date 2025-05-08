@@ -18,13 +18,18 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const avatarsDir = path.join(process.cwd(), 'public', 'avatars')
+
+    // Use a writable directory for production (e.g., /tmp)
+    const avatarsDir = process.env.NODE_ENV === 'production'
+      ? path.join('/tmp', 'avatars')
+      : path.join(process.cwd(), 'public', 'avatars')
+
     await fs.mkdir(avatarsDir, { recursive: true })
 
     const filePath = path.join(avatarsDir, uid)
     await fs.writeFile(filePath, buffer)
 
-    return NextResponse.json({ message: 'File uploaded successfully' })
+    return NextResponse.json({ message: 'File uploaded successfully', filePath })
   } catch (err) {
     console.error('Error uploading file:', err)
     return NextResponse.json({ message: 'Internal server error' }, { status: 500 })

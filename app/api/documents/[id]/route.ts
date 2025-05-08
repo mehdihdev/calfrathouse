@@ -24,7 +24,11 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Document not found.' }, { status: 404 });
     }
 
-    const filePath = path.join(process.cwd(), 'public/documents', document.filename);
+    // Use the correct directory for file deletion
+    const documentsDir = process.env.NODE_ENV === 'production'
+      ? path.join('/tmp', 'documents')
+      : path.join(process.cwd(), 'public', 'documents');
+    const filePath = path.join(documentsDir, document.filename);
     await unlink(filePath);
 
     await db.collection('documents').deleteOne({ _id: new ObjectId(documentId) });

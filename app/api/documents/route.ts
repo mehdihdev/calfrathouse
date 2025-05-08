@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb'; // Ensure this path matches the location of mongodb.ts
-import { writeFile, unlink } from 'fs/promises';
+import { writeFile, unlink, mkdir } from 'fs/promises';
 import path from 'path';
 import Document from '@/models/Document';
 import { ObjectId } from 'mongodb';
@@ -30,15 +30,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'All fields are required.' }, { status: 400 });
     }
 
-    // Save the file to the public/documents folder
-    const filePath = path.join(process.cwd(), 'public/documents', file.name);
+    // Use a writable directory for production (e.g., /tmp)
+    const documentsDir = process.env.NODE_ENV === 'production'
+      ? path.join('/tmp', 'documents')
+      : path.join(process.cwd(), 'public', 'documents');
+    await mkdir(documentsDir, { recursive: true });
+
+    const filePath = path.join(documentsDir, file.name);
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, fileBuffer);
 
-    // Ensure the documents collection exists
-    const collection = db.collection('documents');
-
     // Save document details to the database
+    const collection = db.collection('documents');
     const document = {
       name,
       type,
@@ -65,18 +68,18 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'Document ID is required.' }, { status: 400 });
     }
 
-    // Find the document in the database
     const document = await db.collection('documents').findOne({ _id: new ObjectId(documentId) });
-
     if (!document) {
       return NextResponse.json({ error: 'Document not found.' }, { status: 404 });
     }
 
-    // Delete the file from the public/documents folder
-    const filePath = path.join(process.cwd(), 'public/documents', document.filename);
+    // Use the correct directory for file deletion
+    const documentsDir = process.env.NODE_ENV === 'production'
+      ? path.join('/tmp', 'documents')
+      : path.join(process.cwd(), 'public', 'documents');
+    const filePath = path.join(documentsDir, document.filename);
     await unlink(filePath);
 
-    // Delete the document from the database
     await db.collection('documents').deleteOne({ _id: new ObjectId(documentId) });
 
     return NextResponse.json({ message: 'Document deleted successfully.' });

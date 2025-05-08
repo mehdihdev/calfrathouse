@@ -90,7 +90,11 @@ export default function DocumentsPage() {
             <p className="text-sm text-gray-600">{doc.type}</p>
             <div className="mt-2 flex space-x-2">
               <a
-                href={`/public/documents/${doc.filename}`}
+                href={
+                  process.env.NODE_ENV === 'production'
+                    ? `/tmp/documents/${doc.filename}`
+                    : `/public/documents/${doc.filename}`
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-500 hover:underline"
@@ -98,7 +102,11 @@ export default function DocumentsPage() {
                 View
               </a>
               <a
-                href={`/public/documents/${doc.filename}`}
+                href={
+                  process.env.NODE_ENV === 'production'
+                    ? `/tmp/documents/${doc.filename}`
+                    : `/public/documents/${doc.filename}`
+                }
                 download
                 className="text-blue-500 hover:underline"
               >
