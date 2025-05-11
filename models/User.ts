@@ -24,7 +24,8 @@ const UserSchema = new Schema({
   roomNumber: String,
   rentAmount: Number,
   rentPaid: [String],
-  chores: [ChoreSchema]
+  chores: [ChoreSchema],
+  avatarUrl: { type: String, default: '' }, // Add avatarUrl field
 })
 
 export default mongoose.models.User || mongoose.model("User", UserSchema)

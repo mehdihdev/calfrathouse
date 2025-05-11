@@ -1,14 +1,26 @@
 'use client'
-import { useEffect, useState, useMemo } from 'react'
-import { useRouter } from 'next/navigation'
-import { CardRoot, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card' // Correctly import Card components
-import * as Tabs from '@radix-ui/react-tabs' // Import Tabs from Radix UI
-import * as Dialog from '@radix-ui/react-dialog' // Import Dialog from Radix UI
-import * as Toast from '@radix-ui/react-toast' // Import Toast from Radix UI
+import React, { useEffect, useState, useMemo } from 'react'; // Explicitly import React
+import { useRouter } from 'next/navigation';
+import { CardRoot, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'; // Correctly import Card components
+import * as Tabs from '@radix-ui/react-tabs'; // Import Tabs from Radix UI
+import * as Dialog from '@radix-ui/react-dialog'; // Import Dialog from Radix UI
+import * as Toast from '@radix-ui/react-toast'; // Import Toast from Radix UI
+import { loadFileUploaderFrom } from '@uploadcare/file-uploader/abstract/loadFileUploaderFrom.js'; // Import dynamic loader
+import { FileUploaderRegular } from "@uploadcare/react-uploader/next";
+import "@uploadcare/react-uploader/core.css";
+
+// Extend the Window interface to include the UC property with a specific type
+declare global {
+  interface Window {
+    UC?: {
+      defineComponents: (components: unknown) => void;
+    };
+  }
+}
 
 
 export default function DashboardPage() {
-  interface User { userId: string; firstName: string; lastName: string; roomNumber: string; rentAmount: number; admin?: boolean; costs?: Cost[]; createdAt: string; }
+  interface User { userId: string; firstName: string; lastName: string; roomNumber: string; rentAmount: number; admin?: boolean; costs?: Cost[]; createdAt: string; avatarUrl?: string; }
   interface ImportantDate { id: string; title: string; date: string; }
   interface Cost { _id: string; name: string; amount: number; appliedTo: string[]; timeframe: number }
   interface Chore { _id: string; name: string; dueDate: string; completed: boolean; repeat: string }
@@ -44,11 +56,11 @@ export default function DashboardPage() {
   const [isDateModalOpen, setIsDateModalOpen] = useState(false) // Modal state for important dates
   const [toastMessage, setToastMessage] = useState<string | null>(null) // Toast state
   const [toastType, setToastType] = useState<'success' | 'error' | null>(null); // Toast type state
-  interface Document { _id: string; name: string; type: string; filename: string }
+  interface Document { _id: string; name: string; type: string; filename: string; fileUrl: string }
 
   const [costs, setCosts] = useState<Cost[]>([])
   const [documents, setDocuments] = useState<Document[]>([])
-  const [newDocument, setNewDocument] = useState<{ name: string; type: string; file: File | null }>({
+  const [newDocument, setNewDocument] = useState<{ name: string; type: string; file: string | null }>({
     name: '',
     type: '',
     file: null,
@@ -62,6 +74,21 @@ export default function DashboardPage() {
       document.documentElement.classList.remove('dark')
     }
   }, [darkMode])
+
+  useEffect(() => {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@v1/web/file-uploader.iife.min.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.UC) {
+        window.UC.defineComponents(window.UC);
+      }
+    };
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   async function fetchUser() {
     try {
@@ -271,33 +298,34 @@ export default function DashboardPage() {
 
   const handleUpload = async () => {
     if (!selectedFile || !user) {
-      alert('Please select a file and ensure you are logged in.')
-      return
+      alert('Please select a file and ensure you are logged in.');
+      return;
     }
-
-    const formData = new FormData()
-    formData.append('avatar', selectedFile)
-
+  
+    const formData = new FormData();
+    formData.append('avatar', selectedFile);
+  
     try {
       const res = await fetch(`/api/avatars/${user.userId}`, {
         method: 'POST',
         body: formData,
-      })
-
+      });
+  
       if (res.ok) {
-        alert('Profile picture updated successfully')
-        setIsProfileModalOpen(false)
-        setSelectedFile(null) // Clear the selected file
-        fetchUser() // Refresh user data
+        const data = await res.json();
+        alert('Profile picture updated successfully');
+        setUser((prev) => (prev ? { ...prev, avatarUrl: data.avatarUrl } : prev)); // Update avatarUrl in user state
+        setIsProfileModalOpen(false);
+        setSelectedFile(null); // Clear the selected file
       } else {
-        const errorData = await res.json()
-        alert(`Failed to upload profile picture: ${errorData.message || 'Unknown error'}`)
+        const errorData = await res.json();
+        alert(`Failed to upload profile picture: ${errorData.message || 'Unknown error'}`);
       }
     } catch (err) {
-      console.error('Error uploading profile picture:', err)
-      alert('Error uploading profile picture')
+      console.error('Error uploading profile picture:', err);
+      alert('Error uploading profile picture');
     }
-  }
+  };
 
   const handleAddDate = async () => {
     try {
@@ -461,38 +489,39 @@ export default function DashboardPage() {
     }
   }
 
-  const handleFileUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (files && files[0]) {
-      setNewDocument((prev) => ({ ...prev, file: files[0] }))
-    }
-  }  
+  const handleFileUploadChange = (fileInfo: { cdnUrl: string }) => {
+    setNewDocument((prev) => ({ ...prev, file: fileInfo.cdnUrl }));
+  };
 
   const handleAddDocument = async () => {
     if (!newDocument.name || !newDocument.type || !newDocument.file) {
       setToastMessage('All fields are required.');
       return;
     }
-
-    const formData = new FormData();
-    formData.append('name', newDocument.name);
-    formData.append('type', newDocument.type);
-    formData.append('file', newDocument.file);
-
+  
     try {
+      console.log('Saving document details to the backend...');
       const res = await fetch('/api/documents', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newDocument.name,
+          type: newDocument.type,
+          fileUrl: `https://ucarecdn.com/${newDocument.file}/`,
+        }),
       });
-
+  
       if (res.ok) {
         const addedDocument = await res.json();
+        console.log('Document saved successfully:', addedDocument);
         setDocuments((prev) => [...prev, addedDocument.document]);
         setNewDocument({ name: '', type: '', file: null });
         setIsDocumentModalOpen(false);
         setToastMessage('Document added successfully.');
       } else {
-        setToastMessage('Failed to add document.');
+        const errorData = await res.json();
+        console.error('Failed to save document:', errorData);
+        setToastMessage(errorData.error || 'Failed to add document.');
       }
     } catch (err) {
       console.error('Error adding document:', err);
@@ -519,16 +548,25 @@ export default function DashboardPage() {
     }
   }
 
-  const upcomingDates = useMemo(() => {
-    const now = new Date()
-    const nextWeek = new Date()
-    nextWeek.setDate(now.getDate() + 7)
-    return importantDates.filter((date: ImportantDate) => {
-      const dateObj = new Date(date.date)
-      return dateObj >= now && dateObj <= nextWeek && !dismissedDates.includes(date.id)
-    })
-  }, [importantDates, dismissedDates])
+  useEffect(() => {
+    loadFileUploaderFrom('https://cdn.jsdelivr.net/npm/@uploadcare/file-uploader@v1/web/file-uploader.iife.min.js')
+      .then((UC) => {
+        if (UC) {
+          UC.defineComponents(UC);
+        }
+      })
+      .catch((err) => console.error('Error loading Uploadcare File Uploader:', err));
+  }, []);
 
+  const upcomingDates = useMemo(() => {
+    const now = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(now.getDate() + 7);
+    return importantDates.filter((date: ImportantDate) => {
+      const dateObj = new Date(date.date);
+      return dateObj >= now && dateObj <= nextWeek && !dismissedDates.includes(date.id);
+    });
+  }, [importantDates, dismissedDates]);
 
   const choresThisMonth = useMemo(() => {
     const now = new Date()
@@ -667,7 +705,7 @@ export default function DashboardPage() {
                   <div className="relative">
                     
                     <img
-                      src={`/avatars/${user?.userId}`}
+                      src={user?.avatarUrl || 'https://via.placeholder.com/150'}
                       alt="Profile Picture"
                       className="w-24 h-24 rounded-full object-cover border-2 border-gray-300"
                     />
@@ -1008,7 +1046,7 @@ export default function DashboardPage() {
                       roommates.map((mate) => (
                         <li key={mate.userId} className="flex items-center space-x-4">
                           <img
-                            src={`/avatars/${mate.userId}`}
+                            src={mate.avatarUrl || 'https://via.placeholder.com/150'}
                             alt={`${mate.firstName} ${mate.lastName}`}
                             className="w-10 h-10 rounded-full object-cover border-2 border-gray-300"
                           />
@@ -1033,7 +1071,7 @@ export default function DashboardPage() {
                       housemates.map((mate) => (
                         <li key={mate.userId} className="flex items-center space-x-4">
                           <img
-                            src={`/avatars/${mate.userId}`}
+                            src={mate.avatarUrl || 'https://via.placeholder.com/150'}
                             alt={`${mate.firstName} ${mate.lastName}`}
                             className="w-10 h-10 rounded-full object-cover border-2 border-gray-300"
                           />
@@ -1059,32 +1097,24 @@ export default function DashboardPage() {
                     <p className="text-sm text-gray-600">{doc.type}</p>
                     <div className="mt-2 flex space-x-2">
                       <a
-                        href={
-                          process.env.NODE_ENV === 'production'
-                            ? `/tmp/documents/${doc.filename}`
-                            : `/public/documents/${doc.filename}`
-                        }
+                        href={doc.fileUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline"
+                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                       >
                         View
                       </a>
                       <a
-                        href={
-                          process.env.NODE_ENV === 'production'
-                            ? `/tmp/documents/${doc.filename}`
-                            : `/public/documents/${doc.filename}`
-                        }
+                        href={doc.fileUrl}
                         download
-                        className="text-blue-500 hover:underline"
+                        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
                       >
                         Download
                       </a>
                       {user?.admin && (
                         <button
                           onClick={() => handleDeleteDocument(doc._id)}
-                          className="text-red-500 hover:underline"
+                          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
                         >
                           Delete
                         </button>
@@ -1122,11 +1152,15 @@ export default function DashboardPage() {
                             onChange={(e) => setNewDocument((prev) => ({ ...prev, type: e.target.value }))}
                             className="w-full p-2 border rounded"
                           />
-                          <input
-                            type="file"
-                            accept="*"
-                            onChange={handleFileUploadChange}
-                            className="w-full p-2 border rounded"
+                          <FileUploaderRegular
+                            pubkey={process.env.NEXT_PUBLIC_UPLOADCARE_PUBLIC_KEY || ""}
+                            onChange={(file) => {
+                              if (file && 'cdnUrl' in file) {
+                                handleFileUploadChange(file as { cdnUrl: string });
+                              } else {
+                                console.error("Invalid file object:", file);
+                              }
+                            }}
                           />
                         </div>
                         <div className="mt-4 flex justify-end space-x-2">

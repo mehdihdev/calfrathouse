@@ -1,84 +1,125 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import * as Dialog from '@radix-ui/react-dialog'
-import * as Toast from '@radix-ui/react-toast'
+import React, { useEffect, useState } from 'react'; // Explicitly import React
+import * as Dialog from '@radix-ui/react-dialog';
+import * as Toast from '@radix-ui/react-toast';
 
 export default function DocumentsPage() {
   interface Document {
-    _id: string
-    name: string
-    type: string
-    filename: string
-    createdAt: string
+    _id: string;
+    name: string;
+    type: string;
+    filename: string;
+    createdAt: string;
   }
-  
-  const [documents, setDocuments] = useState<Document[]>([])
-  const [isAdmin,] = useState(false) // Replace with actual admin check
-  const [newDocument, setNewDocument] = useState({ name: '', type: '', filename: '' })
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [toastMessage, setToastMessage] = useState<string | null>(null)
+
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isAdmin,] = useState(false); // Replace with actual admin check
+  const [newDocument, setNewDocument] = useState<{ name: string; type: string; filename: File | null }>({
+    name: '',
+    type: '',
+    filename: null,
+  });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchDocuments() {
       try {
-        const res = await fetch('/api/documents')
+        const res = await fetch('/api/documents');
         if (res.ok) {
-          const data = await res.json()
-          setDocuments(data.documents || [])
+          const data = await res.json();
+          setDocuments(data.documents || []);
         } else {
-          setToastMessage('Failed to fetch documents.')
+          setToastMessage('Failed to fetch documents.');
         }
       } catch (err) {
-        console.error('Error fetching documents:', err)
-        setToastMessage('Error fetching documents.')
+        console.error('Error fetching documents:', err);
+        setToastMessage('Error fetching documents.');
       }
     }
-    fetchDocuments()
-  }, [])
+    fetchDocuments();
+  }, []);
 
   const handleAddDocument = async () => {
     if (!newDocument.name || !newDocument.type || !newDocument.filename) {
-      setToastMessage('All fields are required.')
-      return
+      setToastMessage('All fields are required.');
+      console.log('Validation failed: Missing fields', newDocument);
+      return;
     }
+
+    const uploadcarePublicKey = process.env.UPLOADCARE_PUBLIC_KEY;
+    if (!uploadcarePublicKey) {
+      setToastMessage('Uploadcare public key is missing. Please contact the administrator.');
+      console.error('UPLOADCARE_PUBLIC_KEY is not defined in the environment variables.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('UPLOADCARE_PUB_KEY', uploadcarePublicKey);
+    formData.append('file', newDocument.filename);
 
     try {
-      const res = await fetch('/api/documents', {
+      console.log('Uploading file to Uploadcare...');
+      const uploadRes = await fetch('https://upload.uploadcare.com/base/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newDocument),
-      })
+        body: formData,
+      });
 
-      if (res.ok) {
-        const addedDocument = await res.json()
-        setDocuments((prev) => [...prev, addedDocument.document])
-        setNewDocument({ name: '', type: '', filename: '' })
-        setIsModalOpen(false)
-        setToastMessage('Document added successfully.')
+      if (uploadRes.ok) {
+        const uploadData = await uploadRes.json();
+        const fileUrl = `https://ucarecdn.com/${uploadData.file}/`;
+
+        console.log('File uploaded successfully:', fileUrl);
+        console.log('Saving document details to the backend...');
+
+        const res = await fetch('/api/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newDocument.name,
+            type: newDocument.type,
+            fileUrl,
+          }),
+        });
+
+        if (res.ok) {
+          const addedDocument = await res.json();
+          console.log('Document added successfully:', addedDocument);
+          setDocuments((prev) => [...prev, addedDocument.document]);
+          setNewDocument({ name: '', type: '', filename: null });
+          setIsModalOpen(false);
+          setToastMessage('Document added successfully.');
+        } else {
+          const errorData = await res.json();
+          console.error('Failed to save document:', errorData);
+          setToastMessage(errorData.error || 'Failed to add document.');
+        }
       } else {
-        setToastMessage('Failed to add document.')
+        const errorData = await uploadRes.json();
+        console.error('Failed to upload file to Uploadcare:', errorData);
+        setToastMessage(`Failed to upload document to Uploadcare: ${errorData.detail || 'Unknown error'}`);
       }
     } catch (err) {
-      console.error('Error adding document:', err)
-      setToastMessage('Error adding document.')
+      console.error('Error adding document:', err);
+      setToastMessage('Error adding document.');
     }
-  }
+  };
 
   const handleDeleteDocument = async (documentId: string) => {
     try {
-      const res = await fetch(`/api/documents/${documentId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/documents/${documentId}`, { method: 'DELETE' });
       if (res.ok) {
-        setDocuments((prev) => prev.filter((doc) => doc._id !== documentId))
-        setToastMessage('Document deleted successfully.')
+        setDocuments((prev) => prev.filter((doc) => doc._id !== documentId));
+        setToastMessage('Document deleted successfully.');
       } else {
-        setToastMessage('Failed to delete document.')
+        setToastMessage('Failed to delete document.');
       }
     } catch (err) {
-      console.error('Error deleting document:', err)
-      setToastMessage('Error deleting document.')
+      console.error('Error deleting document:', err);
+      setToastMessage('Error deleting document.');
     }
-  }
+  };
 
   return (
     <div className="p-8">
@@ -90,11 +131,7 @@ export default function DocumentsPage() {
             <p className="text-sm text-gray-600">{doc.type}</p>
             <div className="mt-2 flex space-x-2">
               <a
-                href={
-                  process.env.NODE_ENV === 'production'
-                    ? `/tmp/documents/${doc.filename}`
-                    : `/public/documents/${doc.filename}`
-                }
+                href={`/api/documents/download/${doc.filename}`} // Use filename instead of _id
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-500 hover:underline"
@@ -102,11 +139,7 @@ export default function DocumentsPage() {
                 View
               </a>
               <a
-                href={
-                  process.env.NODE_ENV === 'production'
-                    ? `/tmp/documents/${doc.filename}`
-                    : `/public/documents/${doc.filename}`
-                }
+                href={`/api/documents/download/${doc.filename}`} // Use filename instead of _id
                 download
                 className="text-blue-500 hover:underline"
               >
@@ -150,10 +183,13 @@ export default function DocumentsPage() {
                   className="w-full p-2 border rounded"
                 />
                 <input
-                  type="text"
-                  placeholder="Filename"
-                  value={newDocument.filename}
-                  onChange={(e) => setNewDocument((prev) => ({ ...prev, filename: e.target.value }))}
+                  type="file"
+                  onChange={(e) => {
+                    const files = e.target.files;
+                    if (files && files[0]) {
+                      setNewDocument((prev) => ({ ...prev, filename: files[0] }));
+                    }
+                  }}
                   className="w-full p-2 border rounded"
                 />
               </div>
@@ -189,5 +225,5 @@ export default function DocumentsPage() {
         <Toast.Viewport className="fixed bottom-4 right-4" />
       </Toast.Provider>
     </div>
-  )
+  );
 }
